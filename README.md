@@ -14,11 +14,11 @@ The ant then takes a single step "forwards", and the cycle repeats.
 This has shown to create interesting patterns which depend on the number of values in the field, and the decision of the ant.
 The below examples were created with the default iterations, 128x128 dimensions, and varying patterns.
 
-![RL](./output/example_1.bmp)
-![RLLR](./output/example_2.bmp)
-![RRLL](./output/example_3.bmp)
-![RLR](./output/example_4.bmp)
-![LRRRRRLLR (default pattern)](./output/example_5.bmp)
+![RL](./output/example_1.png)
+![RLLR](./output/example_2.png)
+![RRLL](./output/example_3.png)
+![RLR](./output/example_4.png)
+![LRRRRRLLR (default pattern)](./output/example_5.png)
 
 ## Installation
 

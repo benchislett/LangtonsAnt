@@ -27,14 +27,60 @@ if (NOT raylib_FOUND) # If there's none, fetch and build raylib
   endif()
 endif()
 
+## ImGui
+FetchContent_Populate(imgui
+  URL https://github.com/ocornut/imgui/archive/docking.zip
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/imgui
+)
+
+file(GLOB IMGUI_SRCS
+  imgui/imgui.cpp
+  imgui/imgui_draw.cpp
+  imgui/imgui_demo.cpp
+  imgui/imgui_tables.cpp
+  imgui/imgui_widgets.cpp
+  imgui/misc/cpp/imgui_stdlib.cpp
+
+  imgui/backends/imgui_impl_glfw.cpp
+  imgui/backends/imgui_impl_opengl2.cpp
+)
+
+## Raylib-ImGui
+
+FetchContent_Populate(rlImGui
+  GIT_REPOSITORY https://github.com/raylib-extras/rlImGui.git
+  GIT_TAG main
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/rlImGui
+)
+
+file(GLOB RLIMGUI_SRCS ${CMAKE_CURRENT_LIST_DIR}/rlImGui/*.cpp)
+
 file(GLOB SOURCES src/*.cpp)
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+add_executable(${PROJECT_NAME} ${SOURCES} ${IMGUI_SRCS} ${RLIMGUI_SRCS})
 target_link_libraries(${PROJECT_NAME} raylib)
+
+target_include_directories(${PROJECT_NAME} PUBLIC
+  ${CMAKE_CURRENT_LIST_DIR}/imgui
+  ${CMAKE_CURRENT_LIST_DIR}/imgui/backends
+  ${CMAKE_CURRENT_LIST_DIR}/imgui/misc/cpp
+)
+
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_LIST_DIR}/rlImGui)
 
 # Checks if OSX and links appropriate frameworks (Only required on MacOS)
 if (APPLE)
-    target_link_libraries(${PROJECT_NAME} "-framework IOKit")
-    target_link_libraries(${PROJECT_NAME} "-framework Cocoa")
-    target_link_libraries(${PROJECT_NAME} "-framework OpenGL")
+  target_link_libraries(${PROJECT_NAME} "-framework IOKit")
+  target_link_libraries(${PROJECT_NAME} "-framework Cocoa")
+  target_link_libraries(${PROJECT_NAME} "-framework OpenGL")
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(${PROJECT_NAME} PUBLIC "-fsanitize=address" "-fno-omit-frame-pointer")
+    target_link_options(${PROJECT_NAME} PUBLIC "-fsanitize=address")
+endif()
+
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(${PROJECT_NAME} PUBLIC "-march=native")
+    target_link_options(${PROJECT_NAME} PUBLIC "-flto")
 endif()

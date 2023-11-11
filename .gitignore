@@ -1,2 +1,5 @@
 build/
 raylib/
+imgui/
+rlImGui/
+**/imgui.ini

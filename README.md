@@ -18,35 +18,17 @@ The below examples were created with the default iterations, 128x128 dimensions,
 ![RLLR](./output/example_2.png)
 ![RRLL](./output/example_3.png)
 ![RLR](./output/example_4.png)
-![LRRRRRLLR (default pattern)](./output/example_5.png)
+![LRRRRRLLR](./output/example_5.png)
 
 ## Installation
 
-### Dependencies
+Compilation uses CMake in the standard configuration:
 
-There are currently no dependencies of the program.
-The argument parsing is done natively through `getopt`,
-and the output is also native through primitive FileIO
+```
+mkdir build && cd build
+cmake ..
+make
+./LangtonsAnt
+```
 
-### Makefile
-
-The executable is built with gcc to a file named `simulate`, via the `make` command.
-
-`make clean` will clear any object and executable files lingering, as well as resetting the output image.
-
-## Usage
-
-The program takes a several arguments:
-- `-i int` is the maximum iteration limit. If the ant reaches the outer bounds of the grid before that capacity is reached, the program will terminate early.
-- - `default: 250_000`
-- `-x int` is the width of the simulation.
-- - `default: 256`
-- `-y int` is the height of the simulation. 
-- - `default: 256`
-- `-o string` is the name of the output image file, and should end in `.bmp`
-- - `default: "output/output.bmp"`
-- `-p string` is the pattern to follow. The length determines the number of states for the field, and each value can be one of 'R', 'U', 'L', or 'N' for 90, 180, 270, and 360 degrees clockwise respectively.
-- - `default: "LRRRRRLLR"`
-
-## TODOs
-
+CMake should automatically download any missing dependencies: `Raylib` graphics library, `ImGui` and `Raylib-ImGui` UI extensions.

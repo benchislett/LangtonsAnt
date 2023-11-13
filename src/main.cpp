@@ -317,8 +317,8 @@ void UpdateDrawFrame(Grid& grid, Ant& ant, ConfigWindow& config)
         .data = (void*)grid.getImageContent(), // sharing host data, no need to deallocate this Image
         .width = grid.getWidth(),
         .height = grid.getHeight(),
-        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,
-        .mipmaps = 1
+        .mipmaps = 1,
+        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
     };
 
     Texture2D tex = LoadTextureFromImage(im);
@@ -329,16 +329,16 @@ void UpdateDrawFrame(Grid& grid, Ant& ant, ConfigWindow& config)
 
         // Map the texture to a sized rectangle for efficient upscaling
         Rectangle src = {
-            .width = (float) grid.getWidth(),
-            .height = (float) grid.getHeight(),
             .x = 0,
-            .y = 0
+            .y = 0,
+            .width = (float) grid.getWidth(),
+            .height = (float) grid.getHeight()
         };
         Rectangle dest = {
-            .width = (float) config.getWinWidth(),
-            .height = (float) config.getWinHeight(),
             .x = 0,
-            .y = 0
+            .y = 0,
+            .width = (float) config.getWinWidth(),
+            .height = (float) config.getWinHeight()
         };
         DrawTexturePro(tex, src, dest, {0, 0}, 0, WHITE);
         

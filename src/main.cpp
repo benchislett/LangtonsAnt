@@ -1,7 +1,4 @@
-#include "raylib.h"
-#include "imgui.h"
-#include "imgui_stdlib.h"
-#include "rlImGui.h"
+#include "window_base.h"
 
 #include <cstdlib>
 #include <cassert>
@@ -49,7 +46,7 @@ public:
         return std::make_pair(xoffset, yoffset);
     }
 
-    Grid(int w, int h, int ns) : width(w), height(h), pixels(w*h, WHITE) {}
+    Grid(int w, int h) : width(w), height(h), pixels(w*h, WHITE) {}
 
     void clear() {
         std::fill(pixels.begin(), pixels.end(), WHITE);
@@ -212,51 +209,32 @@ private:
     std::vector<RelativeDirection> pattern;
 };
 
-class ConfigWindow {
+class ConfigWindow : public WindowManagerBase {
 public:
-    enum FrameSpeed {
-        SLOW,
-        MEDIUM,
-        FAST,
-        MAX
-    };
-
-    static inline std::array<int, 4> SpeedValues = {30, 144, 500, 100000};
-    static inline std::map<FrameSpeed, std::string> SpeedNames = {{SLOW, "Slow"}, {MEDIUM, "Medium"}, {FAST, "Fast"}, {MAX, "Max"}};
-
-    ConfigWindow(int w, int h) : winWidth(w), winHeight(h), isOpen(true), gridScaleFactor(4), currentPattern("LR"), iterSteps(1) {
-        setSpeed(FAST);
+    ConfigWindow(int w, int h, const std::string& winTitle = "Langton's Ant Simulator", int fps = 60) : WindowManagerBase(w, h, winTitle, fps), grid(w / 4, h / 4), ant(grid, "LR"), gridScaleFactor(4), currentPattern("LR"), iterSteps(1) {
     }
 
-    void setSpeed(FrameSpeed speed) {
-        fpsLimit = speed;
-        SetTargetFPS(SpeedValues[speed]);
-    }
-
-    void reset(Grid& grid, Ant& ant) const {
+    void reset() {
         grid.clear();
         ant.recenter(grid);
     }
 
-    void draw(Grid& grid, Ant& ant) {
-        ImGui::Begin("Config", &isOpen);
+    void drawImGuiImpl() override {
+        ImGui::Begin("Config", &guiIsOpen);
 
         ImGui::Text("FPS: %d", GetFPS());
 
-        ImGui::SliderInt("Step Size", &iterSteps, 1, 10000, "%d", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderInt("Speed", &iterSteps, 1, 10000, "%d", ImGuiSliderFlags_Logarithmic);
 
         if (ImGui::SliderInt("Scale", &gridScaleFactor, 1, 8))
-            setGridScaleFactor(grid, ant, gridScaleFactor);
-
-        if (ImGui::SliderInt("Speed", (int*)&fpsLimit, SLOW, MAX, SpeedNames[fpsLimit].c_str()))
-            setSpeed(fpsLimit);
+            setGridScaleFactor(gridScaleFactor);
 
         if (ImGui::InputText("Pattern", &currentPattern) && currentPattern.size() > 1)
             ant.setPattern(grid, currentPattern);
 
         // show ImGui Content
         if (ImGui::Button("Reset")) {
-            reset(grid, ant);
+            reset();
         }
 
         ImGui::SameLine();
@@ -278,56 +256,35 @@ public:
         ImGui::End();
     }
 
-    void iter(Grid& grid, Ant& ant) {
+    void loopImpl() override {
         for (int i = 0; i < iterSteps; i++)
             ant.iter(grid);
     }
 
-    int getWinWidth() const { return winWidth; }
-    int getWinHeight() const { return winHeight; }
-
     int getGridScaleFactor() const { return gridScaleFactor; }
-    void setGridScaleFactor(Grid& grid, Ant& ant, int factor) {
+    void setGridScaleFactor(int factor) {
         gridScaleFactor = factor;
-        auto offsets = Grid::computeOffsets(Grid::CENTER, winWidth / factor, winHeight / factor, grid.getWidth(), grid.getHeight());
-        grid.resize(winWidth / factor, winHeight / factor, Grid::CENTER);
+        auto offsets = Grid::computeOffsets(Grid::CENTER, getWinWidth() / factor, getWinHeight() / factor, grid.getWidth(), grid.getHeight());
+        grid.resize(getWinWidth() / factor, getWinHeight() / factor, Grid::CENTER);
         ant.offsetPosition(offsets);
         ant.wrap(grid);
     }
 
     std::string getPattern() const { return currentPattern; }
 
-private:
-    bool isOpen;
+    void preDrawImpl() override {
+        Image im = {
+            .data = (void*)grid.getImageContent(), // sharing host data, no need to deallocate this Image
+            .width = grid.getWidth(),
+            .height = grid.getHeight(),
+            .mipmaps = 1,
+            .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
+        };
 
-    // Global window size
-    int winWidth;
-    int winHeight;
+        tex = LoadTextureFromImage(im);
+    }
 
-    int gridScaleFactor;
-    FrameSpeed fpsLimit;
-    std::string currentPattern;
-    int iterSteps;
-};
-
-void UpdateDrawFrame(Grid& grid, Ant& ant, ConfigWindow& config)
-{
-    // Load pixel data into an image structure and send to GPU via texture
-    Image im = {
-        .data = (void*)grid.getImageContent(), // sharing host data, no need to deallocate this Image
-        .width = grid.getWidth(),
-        .height = grid.getHeight(),
-        .mipmaps = 1,
-        .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-    };
-
-    Texture2D tex = LoadTextureFromImage(im);
-
-    BeginDrawing();
-    {
-        ClearBackground(RAYWHITE);
-
-        // Map the texture to a sized rectangle for efficient upscaling
+    void drawImpl() override {
         Rectangle src = {
             .x = 0,
             .y = 0,
@@ -337,56 +294,33 @@ void UpdateDrawFrame(Grid& grid, Ant& ant, ConfigWindow& config)
         Rectangle dest = {
             .x = 0,
             .y = 0,
-            .width = (float) config.getWinWidth(),
-            .height = (float) config.getWinHeight()
+            .width = (float) getWinWidth(),
+            .height = (float) getWinHeight()
         };
-        DrawTexturePro(tex, src, dest, {0, 0}, 0, WHITE);
-        
-		rlImGuiBegin();
-        {
-            config.draw(grid, ant);
-        }
-		rlImGuiEnd();
-    }
-    EndDrawing();
 
-    UnloadTexture(tex);
-}
+        DrawTexturePro(tex, src, dest, {0, 0}, 0, WHITE);
+    }
+
+    void postDrawImpl() override {
+        UnloadTexture(tex);
+    }
+
+private:
+    bool guiIsOpen;
+
+    Texture2D tex;
+
+    Grid grid;
+    Ant ant;
+
+    int gridScaleFactor;
+    std::string currentPattern;
+    int iterSteps;
+};
 
 int main()
 {
     ConfigWindow cfg(1280, 720);
-
-    // Initialization
-    //--------------------------------------------------------------------------------------
-    InitWindow(cfg.getWinWidth(), cfg.getWinHeight(), "raylib [core] example - basic window");
-
-    SetTraceLogLevel(LOG_NONE);
-
-    rlImGuiSetup(true);
-
-    Grid grid(cfg.getWinWidth() / cfg.getGridScaleFactor(), cfg.getWinHeight() / cfg.getGridScaleFactor(), 2);
-    Ant ant(grid, cfg.getPattern());
-
-    unsigned long long int frameid = 0;
-
-    // Main game loop
-    while (!WindowShouldClose())    // Detect window close button or ESC key
-    {
-        UpdateDrawFrame(grid, ant, cfg);
-        cfg.iter(grid, ant);
-    }
-
-    // De-Initialization
-    rlImGuiShutdown();
-    //--------------------------------------------------------------------------------------
-    CloseWindow();        // Close window and OpenGL context
-    //--------------------------------------------------------------------------------------
-
+    cfg.loop();
     return 0;
 }
-
-//----------------------------------------------------------------------------------
-// Module Functions Definition
-//----------------------------------------------------------------------------------
-

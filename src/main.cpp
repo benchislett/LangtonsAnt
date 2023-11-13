@@ -239,7 +239,7 @@ public:
     }
 
     void draw(Grid& grid, Ant& ant) {
-        ImGui::Begin("Config", &isOpen, ImGuiWindowFlags_MenuBar);
+        ImGui::Begin("Config", &isOpen);
 
         ImGui::Text("FPS: %d", GetFPS());
 

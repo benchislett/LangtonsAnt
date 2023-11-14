@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${default}",
+                "${workspaceFolder}/ext/GraphicsBase/include",
+                "${workspaceFolder}/build/ext/GraphicsBase/imgui",
+                "${workspaceFolder}/build/ext/GraphicsBase/imgui/misc/cpp",
+                "${workspaceFolder}/build/ext/GraphicsBase/rlImGui",
+                "${workspaceFolder}/build/_deps/raylib-src/src"
+            ],
+            "defines": [],
+            "macFrameworkPath": [
+                "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/System/Library/Frameworks"
+            ],
+            "compilerPath": "/usr/bin/clang",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "macos-clang-arm64"
+        }
+    ],
+    "version": 4
+}

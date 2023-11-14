@@ -55,11 +55,5 @@
         "variant": "cpp",
         "vector": "cpp",
         "algorithm": "cpp"
-    },
-    "C_Cpp.default.includePath": [
-        "imgui/",
-        "imgui/misc/cpp",
-        "rlImGui/",
-        "build/_deps/raylib-src/src/"
-    ]
+    }
 }

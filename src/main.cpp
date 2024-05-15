@@ -12,86 +12,21 @@
 
 constexpr static int maxStateCount = 16;
 constexpr static std::array<Color, maxStateCount> colorPalette = {(Color){255, 255, 255, 255},(Color){93, 39, 93, 255},(Color){177, 62, 83, 255},(Color){239, 125, 87, 255},(Color){255, 205, 117, 255},(Color){167, 240, 112, 255},(Color){56, 183, 100, 255},(Color){37, 113, 121, 255},(Color){41, 54, 111, 255},(Color){59, 93, 201, 255},(Color){65, 166, 249, 255},(Color){115, 239, 247, 255},(Color){148, 176, 194, 255},(Color){86, 108, 134, 255},(Color){51, 60, 87, 255},(Color){26, 28, 44, 255}};
-constexpr static int TileWidthBits = 6;
-constexpr static int TileHeightBits = 6;
-constexpr static int TileWidth = 1 << TileWidthBits;
-constexpr static int TileHeight = 1 << TileHeightBits;
 
-class Tile {
-public:
-    Tile() : values{} {
-        assert (std::accumulate(values.begin(), values.end(), 0) == 0);
-    }
+struct IntColorizer {
+  static Color colorize(int x) {
+    assert(x >= 0);
 
-    int getValue(int x, int y) {
-        auto [byteAddr, parity] = lookup(x, y);
-        return parity ? (*byteAddr >> 4) : (*byteAddr & 0xf);
-    }
-
-    void setValue(int x, int y, int quantity) {
-        assert (quantity < 16);
-        auto [byteAddr, parity] = lookup(x, y);
-        unsigned char byte = *byteAddr;
-        if (parity) {
-            *byteAddr = ((quantity << 4) & (0xf0)) | (byte & 0xf);
-        } else {
-            *byteAddr = (byte & (0xf0)) | (quantity & 0xf);
-        }
-    }
-
-private:
-    std::array<unsigned char, TileWidth*TileHeight/2> values;
-
-    std::pair<unsigned char*, bool> lookup(int x, int y) {
-        assert (x >= 0);
-        assert (x < TileWidth);
-        assert (y >= 0);
-        assert (y < TileHeight);
-
-        unsigned char *byte = &values[(y / 2) * TileWidth + x];
-        bool parity = (y % 2);
-        return std::make_pair(byte, parity);
-    }
+    // scale so that different values are more easily distinguishable
+    Color selection = colorPalette[x % maxStateCount];
+    int times = x / maxStateCount + 1;
+    return Color{static_cast<unsigned char>(selection.r / float(times)),
+                 static_cast<unsigned char>(selection.g / float(times)),
+                 static_cast<unsigned char>(selection.b / float(times)), 255};
+  }
 };
 
-class Grid {
-public:
-    Grid() {}
-
-    int getState(int x, int y) {
-        auto [tileX, tileY, tileXOffset, tileYOffset] = indexDecomp(x, y);
-        return refTile(tileX, tileY)->getValue(tileXOffset, tileYOffset);
-    }
-
-    void setState(int x, int y, int newState) { 
-        auto [tileX, tileY, tileXOffset, tileYOffset] = indexDecomp(x, y);
-        refTile(tileX, tileY)->setValue(tileXOffset, tileYOffset, newState);
-    }
-
-    void clear() {
-        tileMap.clear();
-    }
-
-private:
-    std::tuple<int, int, int, int> indexDecomp(int x, int y) {
-        int tileX = x >> 6;
-        int tileY = y >> 6;
-        int tileXOffset = (x >= 0) ? (x % TileWidth) : -(x % TileWidth);
-        int tileYOffset = (y >= 0) ? (y % TileWidth) : -(y % TileWidth);
-        return std::make_tuple(tileX, tileY, tileXOffset, tileYOffset);
-    }
-
-    Tile* refTile(int tileX, int tileY) {
-        auto key = std::make_pair(tileX, tileY);
-        if (tileMap.count(key) == 0) {
-            tileMap[key] = Tile();
-        }
-        return &tileMap[key];
-    }
-
-    std::map<std::pair<int, int>, Tile> tileMap;
-};
-
+template<class Grid>
 class Ant {
 public:
     enum Direction {
@@ -147,7 +82,7 @@ public:
     }
 
     void turn(Grid& grid) {
-        int idx = grid.getState(x, y);
+        int idx = grid.get(x, y);
         assert (idx >= 0);
         assert (idx < pattern.size());
         RelativeDirection rel = pattern[idx];
@@ -168,7 +103,7 @@ public:
     }
 
     void flip(Grid& grid) const {
-        grid.setState(x, y, (grid.getState(x, y) + 1) % pattern.size());
+        grid.set(x, y, (grid.get(x, y) + 1) % pattern.size());
     }
 
     void advance() {
@@ -196,103 +131,49 @@ public:
         y += xy.second;
     }
 
+    void setPosition(int xx, int yy) {
+        x = xx;
+        y = yy;
+    }
+
 private:
     int x, y;
     Direction heading;
     std::vector<RelativeDirection> pattern;
 };
 
-class ConfigWindow : public WindowManagerBase {
-public:
-    ConfigWindow(int w, int h, const std::string& winTitle = "Langton's Ant Simulator", int fps = 60) : WindowManagerBase(w, h, winTitle, fps), grid(), ant(0, 0, "LR"), xOffset(0), yOffset(0), currentPattern("LR"), iterSteps(1), hostImageBuffer{}, wrap(false), stepsTaken(0) {
-        setZoom(1.f);
-        im = {
-            .data = (void*)hostImageBuffer.data(), // sharing host data, no need to deallocate this Image
-            .width = getCameraWidth()+1,
-            .height = getCameraHeight()+1,
-            .mipmaps = 1,
-            .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-        };
+template<class Grid>
+struct AntRuntime {
+    AntRuntime() : guiIsOpen(false), pattern("LRRRRRLLR"), ant(256, 256, "LRRRRRLLR"), stepsTaken(0), reset(false), iterSteps(1) {}
 
-        Camera2D camera = {
-            .offset = {w / 2.f, h / 2.f},
-            .rotation = 0.f,
-            .target = {0.f, 0.f},
-            .zoom = 1.f
-        };
-
-        prevMousePos = GetMousePosition();
-    }
-
-    void reset() {
-        grid.clear();
-        ant = Ant(0, 0, getPattern());
-        stepsTaken = 0;
-    }
-
-    void drawImGuiImpl() override {
-        ImGui::Begin("Config", &guiIsOpen);
-
-        if (ImGui::Button("Locate")) {
-            xOffset = ant.getX();
-            yOffset = ant.getY();
+    void tick(Grid& grid) {
+        if (reset) {
+            ant = Ant<Grid>(256, 256, pattern);
+            grid.clear();
+            stepsTaken = 0;
+            reset = false;
         }
+        for (int i = 0; i < iterSteps; i++) {
+            ant.iter(grid, false);
+        }
+        stepsTaken += iterSteps;
+    }
 
-        ImGui::SameLine();
+    void drawGui() {
+        ImGui::Begin("Config", &guiIsOpen);
 
         ImGui::Text("FPS: %d", GetFPS());
 
         ImGui::SameLine();
 
-        ImGui::Checkbox("Wrap", &wrap);
+        ImGui::SliderInt("Speed", &iterSteps, 1, 500000, "%d", ImGuiSliderFlags_Logarithmic);
 
-        ImGui::SliderInt("Speed", &iterSteps, 1, 10000, "%d", ImGuiSliderFlags_Logarithmic);
-
-        if (IsKeyPressed(KEY_EQUAL) && IsKeyDown(KEY_LEFT_CONTROL)) {
-            setZoom(zoom + 1.f);
-        } else if (IsKeyPressed(KEY_MINUS) && IsKeyDown(KEY_LEFT_CONTROL)) {
-            if (zoom > 1.f)
-                setZoom(zoom - 1.f);
+        if (ImGui::InputText("Pattern", &pattern) && pattern.size() > 1) {
+            reset = true;
         }
 
-        float diff = GetMouseWheelMove();
-        if (fabsf(diff) > 1e-3) {
-            setZoom(std::max(1.f, zoom + diff));
-        }
-
-        Vector2 thisPos = GetMousePosition();
-
-        if (IsMouseButtonDown(0) && !ImGui::IsWindowFocused()) {
-            float dx = thisPos.x - prevMousePos.x;
-            float dy = thisPos.y - prevMousePos.y;
-            xOffset -= dx / zoom;
-            yOffset -= dy / zoom;
-        }
-        prevMousePos = thisPos;
-
-        if (ImGui::InputText("Pattern", &currentPattern) && currentPattern.size() > 1) {
-            reset();
-        }
-
-        // show ImGui Content
         if (ImGui::Button("Reset")) {
-            reset();
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Step 10k")) {
-            for (int i = 0; i < 10000; i++) {
-                antStep();
-            }
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button("Step 100k")) {
-            for (int i = 0; i < 100000; i++) {
-                antStep();
-            }
+            reset = true;
         }
 
         ImGui::Text("Steps Taken: %llu", stepsTaken);
@@ -300,95 +181,17 @@ public:
         ImGui::End();
     }
 
-    void antStep() {
-        ant.iter(grid, wrap, screenXOffset(), getCameraWidth(), screenYOffset(), getCameraHeight());
-        stepsTaken++;
-    }
-
-    void loopImpl() override {
-        for (int i = 0; i < iterSteps; i++) {
-            antStep();
-        }
-    }
-
-    float getZoom() const { return zoom; }
-    void setZoom(float factor) {
-        zoom = factor;
-        hostImageBuffer.clear();
-        hostImageBuffer.resize((getCameraWidth()+1)*(getCameraHeight()+1), WHITE);
-        im.data = (void*)hostImageBuffer.data();
-        im.width = getCameraWidth()+1;
-        im.height = getCameraHeight()+1;
-    }
-
-    int getCameraWidth() const { return (int) (getWinWidth() / zoom); }
-    int getCameraHeight() const { return (int) (getWinHeight() / zoom); }
-
-    int screenXOffset() const { return -getWinWidth() / zoom / 2.f + xOffset; }
-    int screenYOffset() const { return -getWinHeight() / zoom / 2.f + yOffset; }
-
-    std::string getPattern() const { return currentPattern; }
-
-    void preDrawImpl() override {
-        for (int y = 0; y < getCameraHeight() + 1; y++) {
-            for (int x = 0; x < getCameraWidth() + 1; x++) {
-                hostImageBuffer[y * (getCameraWidth()+1) + x] = colorPalette[grid.getState(x + screenXOffset(), y + screenYOffset())];
-            }
-        }
-
-        tex = LoadTextureFromImage(im);
-    }
-
-    void drawImpl() override {
-        Rectangle src = {
-            .x = 0,
-            .y = 0,
-            .width = (float) getWinWidth() / zoom,
-            .height = (float) getWinHeight() / zoom
-        };
-        Rectangle dest = {
-            .x = 0,
-            .y = 0,
-            .width = (float) getWinWidth(),
-            .height = (float) getWinHeight()
-        };
-
-        DrawTexturePro(tex, src, dest, {0, 0}, 0, WHITE);
-    }
-
-    void postDrawImpl() override {
-        UnloadTexture(tex);
-    }
-
-private:
-    bool guiIsOpen;
-
-    Vector2 prevMousePos;
-
-    Image im;
-    Texture2D tex;
-
-    Camera2D camera;
-
-    std::vector<Color> hostImageBuffer;
-
-    Grid grid;
-    Ant ant;
-
-    bool wrap;
-
-    float zoom;
-    float xOffset, yOffset;
-
-    std::string currentPattern;
     int iterSteps;
-
+    bool guiIsOpen;
+    std::string pattern;
+    Ant<Grid> ant;
     unsigned long long int stepsTaken;
+    bool reset;
 };
 
 int main()
 {
-    ConfigWindow cfg(1280, 720);
+    DynamicGridWindow<AntRuntime, int, IntColorizer> cfg(512, 512, "Langton's Ant Simulator", 60);
     cfg.loop();
     return 0;
 }
